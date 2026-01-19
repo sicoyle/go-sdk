@@ -257,11 +257,11 @@ type Client interface {
 // will return the already created instance. To create multiple instances of the Dapr client,
 // use one of the parameterized factory functions:
 //
-//	NewClientWithPort(port string) (client Client, err error)
-//	NewClientWithAddress(address string) (client Client, err error)
-//	NewClientWithConnection(conn *grpc.ClientConn) Client
-//	NewClientWithSocket(socket string) (client Client, err error)
-func NewClient() (client Client, err error) {
+//	NewClientWithPort(port string, dialOpts ...grpc.DialOption) (client Client, err error)
+//	NewClientWithAddress(address string, dialOpts ...grpc.DialOption) (client Client, err error)
+//	NewClientWithConnection(conn *grpc.ClientConn, dialOpts ...grpc.DialOption) Client
+//	NewClientWithSocket(socket string, dialOpts ...grpc.DialOption) (client Client, err error)
+func NewClient(dialOpts ...grpc.DialOption) (client Client, err error) {
 	lock.Lock()
 	defer lock.Unlock()
 
@@ -271,7 +271,7 @@ func NewClient() (client Client, err error) {
 
 	addr, ok := os.LookupEnv(daprGRPCEndpointEnvVarName)
 	if ok {
-		client, err = NewClientWithAddress(addr)
+		client, err = NewClientWithAddress(addr, dialOpts...)
 		if err != nil {
 			return nil, fmt.Errorf("error creating %q client: %w", daprGRPCEndpointEnvVarName, err)
 		}
@@ -284,7 +284,7 @@ func NewClient() (client Client, err error) {
 		port = daprPortDefault
 	}
 
-	c, err := NewClientWithPort(port)
+	c, err := NewClientWithPort(port, dialOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("error creating default client: %w", err)
 	}
@@ -293,8 +293,8 @@ func NewClient() (client Client, err error) {
 	return defaultClient, nil
 }
 
-func NewWorkflowClient() (*workflow.Client, error) {
-	dclient, err := NewClient()
+func NewWorkflowClient(dialOpts ...grpc.DialOption) (*workflow.Client, error) {
+	dclient, err := NewClient(dialOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -303,22 +303,22 @@ func NewWorkflowClient() (*workflow.Client, error) {
 }
 
 // NewClientWithPort instantiates Dapr using specific gRPC port.
-func NewClientWithPort(port string) (client Client, err error) {
+func NewClientWithPort(port string, dialOpts ...grpc.DialOption) (client Client, err error) {
 	if port == "" {
 		return nil, errors.New("nil port")
 	}
-	return NewClientWithAddress(net.JoinHostPort("127.0.0.1", port))
+	return NewClientWithAddress(net.JoinHostPort("127.0.0.1", port), dialOpts...)
 }
 
 // NewClientWithAddress instantiates Dapr using specific address (including port).
 // Deprecated: use NewClientWithAddressContext instead.
-func NewClientWithAddress(address string) (client Client, err error) {
-	return NewClientWithAddressContext(context.Background(), address)
+func NewClientWithAddress(address string, dialOpts ...grpc.DialOption) (client Client, err error) {
+	return NewClientWithAddressContext(context.Background(), address, dialOpts...)
 }
 
 // NewClientWithAddressContext instantiates Dapr using specific address (including port).
 // Uses the provided context to create the connection.
-func NewClientWithAddressContext(ctx context.Context, address string) (client Client, err error) {
+func NewClientWithAddressContext(ctx context.Context, address string, dialOpts ...grpc.DialOption) (client Client, err error) {
 	if address == "" {
 		return nil, errors.New("empty address")
 	}
@@ -342,6 +342,8 @@ func NewClientWithAddressContext(ctx context.Context, address string) (client Cl
 		authTokenUnaryInterceptor(at),
 		authTokenStreamInterceptor(at),
 	}
+
+	opts = append(opts, dialOpts...)
 
 	if parsedAddress.TLS {
 		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(new(tls.Config))))
@@ -379,19 +381,25 @@ func getClientTimeoutSeconds() (int, error) {
 }
 
 // NewClientWithSocket instantiates Dapr using specific socket.
-func NewClientWithSocket(socket string) (client Client, err error) {
+func NewClientWithSocket(socket string, dialOpts ...grpc.DialOption) (client Client, err error) {
 	if socket == "" {
 		return nil, errors.New("nil socket")
 	}
 	at := newAuthToken()
 	logger.Printf("dapr client initializing for: %s", socket)
 	addr := "unix://" + socket
-	conn, err := grpc.Dial( //nolint:staticcheck
-		addr,
+
+	opts := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithUserAgent(userAgent()),
 		authTokenUnaryInterceptor(at),
 		authTokenStreamInterceptor(at),
+	}
+
+	opts = append(opts, dialOpts...)
+	conn, err := grpc.Dial( //nolint:staticcheck
+		addr,
+		opts...,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("error creating connection to '%s': %w", addr, err)

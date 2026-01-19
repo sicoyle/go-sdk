@@ -124,6 +124,30 @@ func TestNewClient(t *testing.T) {
 		ctx := c.WithTraceID(t.Context(), "")
 		_ = c.WithTraceID(ctx, "test")
 	})
+
+	t.Run("new client with extra dial options", func(t *testing.T) {
+		_, err := os.Stat(testSocket)
+		if err != nil {
+			return
+		}
+
+		c, err := NewClientWithSocket(testSocket, grpc.WithUserAgent("test"))
+		require.NoError(t, err)
+		defer c.Close()
+
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		addr := "unix:" + testSocket
+		c, err = NewClientWithAddressContext(ctx, addr, grpc.WithUserAgent("test"))
+		require.NoError(t, err)
+		defer c.Close()
+
+		t.Setenv(daprGRPCEndpointEnvVarName, addr)
+		c, err = NewClient(grpc.WithUserAgent("test"))
+		require.NoError(t, err)
+		defer c.Close()
+	})
 }
 
 func TestShutdown(t *testing.T) {
