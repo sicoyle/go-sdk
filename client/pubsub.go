@@ -169,6 +169,7 @@ func (c *GRPCClient) PublishEvents(ctx context.Context, pubsubName, topicName st
 		o(request)
 	}
 
+	//nolint:staticcheck // SA1019 Deprecated: use BulkPublishEvent instead.
 	res, err := c.protoClient.BulkPublishEventAlpha1(ctx, request)
 	// If there is an error, all events failed to publish.
 	if err != nil {
