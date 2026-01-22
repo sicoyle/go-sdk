@@ -580,7 +580,7 @@ func (s *testDaprServer) ConverseAlpha1(ctx context.Context, in *pb.Conversation
 }
 
 func (s *testDaprServer) ConverseAlpha2(ctx context.Context, in *pb.ConversationRequestAlpha2) (*pb.
-ConversationResponseAlpha2,
+	ConversationResponseAlpha2,
 	error,
 ) {
 	return &pb.ConversationResponseAlpha2{}, nil
