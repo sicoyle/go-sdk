@@ -383,10 +383,18 @@ func (s *testDaprServer) PublishEvent(ctx context.Context, req *pb.PublishEventR
 	return &emptypb.Empty{}, nil
 }
 
+func (s *testDaprServer) BulkPublishEvent(ctx context.Context, req *pb.BulkPublishRequest) (*pb.BulkPublishResponse, error) {
+	return s.bulkPublishEvent(req)
+}
+
 // BulkPublishEventAlpha1 mocks the BulkPublishEventAlpha1 API.
+func (s *testDaprServer) BulkPublishEventAlpha1(ctx context.Context, req *pb.BulkPublishRequest) (*pb.BulkPublishResponse, error) {
+	return s.bulkPublishEvent(req)
+}
+
 // It will fail to publish events that start with "fail".
 // It will fail the entire request if an event starts with "failall".
-func (s *testDaprServer) BulkPublishEventAlpha1(ctx context.Context, req *pb.BulkPublishRequest) (*pb.BulkPublishResponse, error) {
+func (s *testDaprServer) bulkPublishEvent(req *pb.BulkPublishRequest) (*pb.BulkPublishResponse, error) {
 	failedEntries := make([]*pb.BulkPublishResponseFailedEntry, 0)
 	for _, entry := range req.GetEntries() {
 		if bytes.HasPrefix(entry.GetEvent(), []byte("failall")) {
@@ -572,7 +580,7 @@ func (s *testDaprServer) ConverseAlpha1(ctx context.Context, in *pb.Conversation
 }
 
 func (s *testDaprServer) ConverseAlpha2(ctx context.Context, in *pb.ConversationRequestAlpha2) (*pb.
-	ConversationResponseAlpha2,
+ConversationResponseAlpha2,
 	error,
 ) {
 	return &pb.ConversationResponseAlpha2{}, nil
