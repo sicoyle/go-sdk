@@ -3,7 +3,7 @@ module github.com/dapr/go-sdk
 go 1.24.12
 
 require (
-	github.com/dapr/dapr v1.17.0-rc.1.0.20260119144134-6071c46179eb
+	github.com/dapr/dapr v1.17.0-rc.1.0.20260129135036-c169c5be5eeb
 	github.com/dapr/durabletask-go v0.11.0
 	github.com/dapr/kit v0.16.2-0.20251124175541-3ac186dff64d
 	github.com/go-chi/chi/v5 v5.2.2
