@@ -15,11 +15,11 @@ package manager
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"reflect"
+	"slices"
 	"sync"
 	"unicode"
 	"unicode/utf8"
@@ -29,6 +29,22 @@ import (
 	"github.com/dapr/go-sdk/actor/codec"
 	actorErr "github.com/dapr/go-sdk/actor/error"
 )
+
+// ignoredActorMethods is a list of method names that should be ignored during actor method reflection.
+// It is initialized with the Type() method which is needed to comply with the ServerContext interface.
+var ignoredActorMethods = []string{"Type"}
+
+// init initializes the action method exclusion list with methods from ServerImplBaseCtx and ReminderCallee interfaces.
+func init() {
+	serverImplBaseCtxType := reflect.TypeOf(&actor.ServerImplBaseCtx{})
+	for i := range serverImplBaseCtxType.NumMethod() {
+		ignoredActorMethods = append(ignoredActorMethods, serverImplBaseCtxType.Method(i).Name)
+	}
+	ReminderCallType := reflect.TypeOf((*actor.ReminderCallee)(nil)).Elem()
+	for i := range ReminderCallType.NumMethod() {
+		ignoredActorMethods = append(ignoredActorMethods, ReminderCallType.Method(i).Name)
+	}
+}
 
 type ActorManager interface {
 	RegisterActorImplFactory(f actor.Factory)
@@ -181,7 +197,7 @@ func (m *DefaultActorManagerContext) InvokeReminder(ctx context.Context, actorID
 		return actorErr.ErrActorFactoryNotSet
 	}
 	reminderParams := &api.ActorReminderParams{}
-	if err := json.Unmarshal(params, reminderParams); err != nil {
+	if err := m.serializer.Unmarshal(params, reminderParams); err != nil {
 		log.Printf("failed to unmarshal reminder param, err: %v ", err)
 		return actorErr.ErrRemindersParamsInvalid
 	}
@@ -204,7 +220,7 @@ func (m *DefaultActorManagerContext) InvokeTimer(ctx context.Context, actorID, t
 		return actorErr.ErrActorFactoryNotSet
 	}
 	timerParams := &api.ActorTimerParam{}
-	if err := json.Unmarshal(params, timerParams); err != nil {
+	if err := m.serializer.Unmarshal(params, timerParams); err != nil {
 		log.Printf("failed to unmarshal reminder param, err: %v ", err)
 		return actorErr.ErrTimerParamsInvalid
 	}
@@ -249,8 +265,12 @@ type MethodType struct {
 // suitableMethods returns suitable Rpc methods of typ.
 func suitableMethods(typ reflect.Type) map[string]*MethodType {
 	methods := make(map[string]*MethodType)
-	for m := 0; m < typ.NumMethod(); m++ {
+	for m := range typ.NumMethod() {
 		method := typ.Method(m)
+		// skip methods from ServerImplBaseCtx struct and ServerContext and ReminderCallee interfaces.
+		if slices.Contains(ignoredActorMethods, method.Name) {
+			continue
+		}
 		if mt, err := suiteMethod(method); err != nil {
 			log.Printf("method %s is illegal, err = %s, just skip it", method.Name, err)
 		} else {
@@ -278,7 +298,7 @@ func suiteMethod(method reflect.Method) (*MethodType, error) {
 	)
 
 	if outNum > 2 || outNum == 0 {
-		return nil, errors.New("num out invalid")
+		return nil, errors.New("the method must have one or two return values")
 	}
 
 	// The latest return type of the method must be error.

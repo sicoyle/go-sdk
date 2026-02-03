@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/stretchr/testify/assert"
 
 	"github.com/dapr/go-sdk/service/common"
@@ -11,12 +13,12 @@ import (
 )
 
 func TestTopicRegistrarValidation(t *testing.T) {
-	fn := func(ctx context.Context, e *common.TopicEvent) (retry bool, err error) {
+	fn := common.TopicEventHandler(func(ctx context.Context, e *common.TopicEvent) (retry bool, err error) {
 		return false, nil
-	}
+	})
 	tests := map[string]struct {
 		sub common.Subscription
-		fn  common.TopicEventHandler
+		fn  common.TopicEventSubscriber
 		err string
 	}{
 		"pubsub required": {
@@ -64,18 +66,18 @@ func TestTopicRegistrarValidation(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			m := internal.TopicRegistrar{}
 			if tt.err != "" {
-				assert.EqualError(t, m.AddSubscription(&tt.sub, tt.fn), tt.err)
+				require.EqualError(t, m.AddSubscription(&tt.sub, tests[name].fn), tt.err)
 			} else {
-				assert.NoError(t, m.AddSubscription(&tt.sub, tt.fn))
+				require.NoError(t, m.AddSubscription(&tt.sub, tt.fn))
 			}
 		})
 	}
 }
 
 func TestTopicAddSubscriptionMetadata(t *testing.T) {
-	handler := func(ctx context.Context, e *common.TopicEvent) (retry bool, err error) {
+	handler := common.TopicEventHandler(func(ctx context.Context, e *common.TopicEvent) (retry bool, err error) {
 		return false, nil
-	}
+	})
 	topicRegistrar := internal.TopicRegistrar{}
 	sub := &common.Subscription{
 		PubsubName: "pubsubname",
@@ -83,7 +85,7 @@ func TestTopicAddSubscriptionMetadata(t *testing.T) {
 		Metadata:   map[string]string{"key": "value"},
 	}
 
-	assert.NoError(t, topicRegistrar.AddSubscription(sub, handler))
+	require.NoError(t, topicRegistrar.AddSubscription(sub, handler))
 
 	actual := topicRegistrar["pubsubname-topic"].Subscription
 	expected := &internal.TopicSubscription{

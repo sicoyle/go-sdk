@@ -14,12 +14,13 @@ limitations under the License.
 package client
 
 import (
-	"context"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/stretchr/testify/assert"
 
-	pb "github.com/dapr/go-sdk/dapr/proto/runtime/v1"
+	pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
 const (
@@ -27,18 +28,18 @@ const (
 )
 
 func TestLock(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("try lock invalid store name", func(t *testing.T) {
 		r, err := testClient.TryLockAlpha1(ctx, "", &LockRequest{})
 		assert.Nil(t, r)
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("try lock invalid request", func(t *testing.T) {
 		r, err := testClient.TryLockAlpha1(ctx, testLockStore, nil)
 		assert.Nil(t, r)
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("try lock", func(t *testing.T) {
@@ -48,7 +49,7 @@ func TestLock(t *testing.T) {
 			ExpiryInSeconds: 5,
 		})
 		assert.NotNil(t, r)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, r.Success)
 	})
 
@@ -58,13 +59,13 @@ func TestLock(t *testing.T) {
 			ResourceID: "resource1",
 		})
 		assert.Nil(t, r)
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("unlock invalid request", func(t *testing.T) {
 		r, err := testClient.UnlockAlpha1(ctx, "testLockStore", nil)
 		assert.Nil(t, r)
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("unlock", func(t *testing.T) {
@@ -73,7 +74,7 @@ func TestLock(t *testing.T) {
 			ResourceID: "resource1",
 		})
 		assert.NotNil(t, r)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, pb.UnlockResponse_SUCCESS.String(), r.Status)
 	})
 }

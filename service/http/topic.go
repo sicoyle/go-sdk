@@ -19,6 +19,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -37,6 +38,9 @@ const (
 
 	// PubSubHandlerDropStatusCode is the pubsub event appcallback response code indicating that Dapr should drop that message.
 	PubSubHandlerDropStatusCode int = http.StatusSeeOther
+
+	// HealthzRoute Health check default route used by the server
+	HealthzRoute = "healthz"
 )
 
 // topicEventJSON is identical to `common.TopicEvent`
@@ -65,6 +69,10 @@ type topicEventJSON struct {
 	Topic string `json:"topic"`
 	// PubsubName is name of the pub/sub this message came from
 	PubsubName string `json:"pubsubname"`
+	// TraceID is the tracing header identifier for the incoming event
+	TraceID string `json:"traceid"`
+	// TraceParent is name of the parent trace identifier for the incoming event
+	TraceParent string `json:"traceparent"`
 }
 
 func (in topicEventJSON) getData() (data any, rawData []byte) {
@@ -128,11 +136,22 @@ func (s *Server) registerBaseHandler() {
 	}
 	s.mux.HandleFunc("/dapr/subscribe", f)
 
-	// register health check handler
-	fHealth := func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
+	// check if the healthz route is already registered by the user to avoid overwriting it
+	hasHealthz := false
+	for _, route := range s.mux.Routes() {
+		if route.Pattern == "/"+HealthzRoute || route.Pattern == HealthzRoute {
+			hasHealthz = true
+			break
+		}
 	}
-	s.mux.Get("/healthz", fHealth)
+
+	if !hasHealthz {
+		// register health check handler
+		fHealth := func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}
+		s.mux.Get("/"+HealthzRoute, fHealth)
+	}
 
 	// register actor config handler
 	fRegister := func(w http.ResponseWriter, r *http.Request) {
@@ -227,6 +246,15 @@ func (s *Server) registerBaseHandler() {
 
 // AddTopicEventHandler appends provided event handler with it's name to the service.
 func (s *Server) AddTopicEventHandler(sub *common.Subscription, fn common.TopicEventHandler) error {
+	if fn == nil {
+		return errors.New("topic handler required")
+	}
+
+	return s.AddTopicEventSubscriber(sub, fn)
+}
+
+// AddTopicEventSubscriber appends the provided subscriber to the service.
+func (s *Server) AddTopicEventSubscriber(sub *common.Subscription, subscriber common.TopicEventSubscriber) error {
 	if sub == nil {
 		return errors.New("subscription required")
 	}
@@ -235,7 +263,7 @@ func (s *Server) AddTopicEventHandler(sub *common.Subscription, fn common.TopicE
 	if sub.Route == "" {
 		return errors.New("handler route name")
 	}
-	if err := s.topicRegistrar.AddSubscription(sub, fn); err != nil {
+	if err := s.topicRegistrar.AddSubscription(sub, subscriber); err != nil {
 		return err
 	}
 
@@ -285,13 +313,16 @@ func (s *Server) AddTopicEventHandler(sub *common.Subscription, fn common.TopicE
 				Subject:         in.Subject,
 				PubsubName:      in.PubsubName,
 				Topic:           in.Topic,
+				Metadata:        getCustomMetdataFromHeaders(r),
+				TraceID:         in.TraceID,
+				TraceParent:     in.TraceParent,
 			}
 
 			w.Header().Add("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 
 			// execute user handler
-			retry, err := fn(r.Context(), &te)
+			retry, err := subscriber.Handle(r.Context(), &te)
 			if err == nil {
 				writeStatus(w, common.SubscriptionResponseStatusSuccess)
 				return
@@ -308,7 +339,17 @@ func (s *Server) AddTopicEventHandler(sub *common.Subscription, fn common.TopicE
 	return nil
 }
 
-func writeStatus(w http.ResponseWriter, s string) {
+func getCustomMetdataFromHeaders(r *http.Request) map[string]string {
+	md := make(map[string]string)
+	for k, v := range r.Header {
+		if strings.HasPrefix(strings.ToLower(k), "metadata.") {
+			md[k[9:]] = v[0]
+		}
+	}
+	return md
+}
+
+func writeStatus(w http.ResponseWriter, s common.SubscriptionResponseStatus) {
 	status := &common.SubscriptionResponse{Status: s}
 	if err := json.NewEncoder(w).Encode(status); err != nil {
 		http.Error(w, err.Error(), PubSubHandlerRetryStatusCode)

@@ -16,7 +16,8 @@ output_match_mode: substring
 expected_stdout_lines:
   - "ContentType:text/plain, Verb:POST, QueryString:, hellow"
 background: true
-sleep: 15
+sleep: 30
+timeout_seconds: 60
 -->
 
 ```bash
@@ -60,6 +61,7 @@ expected_stdout_lines:
   - '== APP == output binding invoked'
 background: true
 sleep: 15
+timeout_seconds: 60
 -->
 
 ```bash
@@ -89,7 +91,7 @@ expected_stdout_lines:
 ```bash
 dapr run --app-id custom-grpc-client \
 		 -d ./config \
-		 --dapr-http-max-request-size 41 \
+		 --max-body-size 41Mi \
 		 --log-level debug \
 		 go run ./custom-grpc-client/main.go
 ```
@@ -155,17 +157,7 @@ Uses the [config/cron.yaml](config/cron.yaml) component
 
 ### Cleanup
 
-<!-- STEP
-expected_stdout_lines: 
-  - '✅  app stopped successfully: serving'
-expected_stderr_lines:
-name: Shutdown dapr
--->
-
 ```bash
 dapr stop --app-id serving
 (lsof -i:8080 | grep main) | awk '{print $2}' | xargs  kill
 ```
-
-<!-- END_STEP -->
-

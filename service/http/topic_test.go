@@ -57,7 +57,7 @@ func TestEventNilHandler(t *testing.T) {
 		Metadata:   map[string]string{},
 	}
 	err := s.AddTopicEventHandler(sub, nil)
-	assert.Errorf(t, err, "expected error adding event handler")
+	require.Errorf(t, err, "expected error adding event handler")
 }
 
 func TestEventHandler(t *testing.T) {
@@ -71,7 +71,9 @@ func TestEventHandler(t *testing.T) {
 		"comexampleextension1" : "value",
 		"comexampleothervalue" : 5,
 		"datacontenttype" : "application/json",
-		"data" : "eyJtZXNzYWdlIjoiaGVsbG8ifQ=="
+		"data" : "eyJtZXNzYWdlIjoiaGVsbG8ifQ==",
+		"traceid": "aaa",
+		"traceparent": "bbb"
 	}`
 
 	s := newServer("", nil)
@@ -83,7 +85,7 @@ func TestEventHandler(t *testing.T) {
 		Metadata:   map[string]string{},
 	}
 	err := s.AddTopicEventHandler(sub, testTopicFunc)
-	assert.NoErrorf(t, err, "error adding event handler")
+	require.NoErrorf(t, err, "error adding event handler")
 
 	sub2 := &common.Subscription{
 		PubsubName: "messages",
@@ -92,7 +94,7 @@ func TestEventHandler(t *testing.T) {
 		Metadata:   map[string]string{},
 	}
 	err = s.AddTopicEventHandler(sub2, testErrorTopicFunc)
-	assert.NoErrorf(t, err, "error adding error event handler")
+	require.NoErrorf(t, err, "error adding error event handler")
 
 	sub3 := &common.Subscription{
 		PubsubName: "messages",
@@ -102,7 +104,7 @@ func TestEventHandler(t *testing.T) {
 		Priority:   1,
 	}
 	err = s.AddTopicEventHandler(sub3, testTopicFunc)
-	assert.NoErrorf(t, err, "error adding error event handler")
+	require.NoErrorf(t, err, "error adding error event handler")
 
 	s.registerBaseHandler()
 
@@ -148,8 +150,8 @@ func TestEventHandler(t *testing.T) {
 
 func TestEventDataHandling(t *testing.T) {
 	tests := map[string]struct {
-		data   string
-		result interface{}
+		data         string
+		expectedData interface{}
 	}{
 		"JSON nested": {
 			data: `{
@@ -166,7 +168,7 @@ func TestEventDataHandling(t *testing.T) {
 					"message":"hello"
 				}
 			}`,
-			result: map[string]interface{}{
+			expectedData: map[string]interface{}{
 				"message": "hello",
 			},
 		},
@@ -183,7 +185,7 @@ func TestEventDataHandling(t *testing.T) {
 				"datacontenttype" : "application/json",
 				"data" : "eyJtZXNzYWdlIjoiaGVsbG8ifQ=="
 			}`,
-			result: map[string]interface{}{
+			expectedData: map[string]interface{}{
 				"message": "hello",
 			},
 		},
@@ -200,7 +202,7 @@ func TestEventDataHandling(t *testing.T) {
 				"datacontenttype" : "application/json",
 				"data_base64" : "eyJtZXNzYWdlIjoiaGVsbG8ifQ=="
 			}`,
-			result: map[string]interface{}{
+			expectedData: map[string]interface{}{
 				"message": "hello",
 			},
 		},
@@ -217,7 +219,7 @@ func TestEventDataHandling(t *testing.T) {
 				"datacontenttype" : "application/octet-stream",
 				"data_base64" : "eyJtZXNzYWdlIjoiaGVsbG8ifQ=="
 			}`,
-			result: []byte(`{"message":"hello"}`),
+			expectedData: []byte(`{"message":"hello"}`),
 		},
 		"JSON string escaped": {
 			data: `{
@@ -232,7 +234,7 @@ func TestEventDataHandling(t *testing.T) {
 				"datacontenttype" : "application/json",
 				"data" : "{\"message\":\"hello\"}"
 			}`,
-			result: map[string]interface{}{
+			expectedData: map[string]interface{}{
 				"message": "hello",
 			},
 		},
@@ -256,7 +258,7 @@ func TestEventDataHandling(t *testing.T) {
 		return false, nil
 	}
 	err := s.AddTopicEventHandler(sub, handler)
-	assert.NoErrorf(t, err, "error adding event handler")
+	require.NoErrorf(t, err, "error adding event handler")
 
 	s.registerBaseHandler()
 
@@ -264,7 +266,85 @@ func TestEventDataHandling(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			makeEventRequest(t, s, "/test", tt.data, http.StatusOK)
 			<-recv
-			assert.Equal(t, tt.result, topicEvent.Data)
+			assert.Equal(t, tt.expectedData, topicEvent.Data)
+		})
+	}
+}
+
+func TestEventMetadataHandling(t *testing.T) {
+	tests := map[string]struct {
+		metadata         map[string]string
+		expectedMetadata map[string]string
+	}{
+		"single key-value pair with prefix": {
+			metadata: map[string]string{
+				"metadata.key1": "value1",
+			},
+			expectedMetadata: map[string]string{
+				"key1": "value1",
+			},
+		},
+		"multiple key-value pairs with prefix": {
+			metadata: map[string]string{
+				"metadata.key1": "value1",
+				"metadata.key2": "value2",
+			},
+			expectedMetadata: map[string]string{
+				"key1": "value1",
+				"key2": "value2",
+			},
+		},
+		"some keys with prefix and some without": {
+			metadata: map[string]string{
+				"metadata.key1": "value1",
+				"key2":          "value2",
+			},
+			expectedMetadata: map[string]string{
+				"key1": "value1",
+			},
+		},
+	}
+
+	s := newServer("", nil)
+
+	sub := &common.Subscription{
+		PubsubName: "messages",
+		Topic:      "test",
+		Route:      "/test",
+		Metadata:   map[string]string{},
+	}
+
+	recv := make(chan struct{}, 1)
+	var topicEvent *common.TopicEvent
+	handler := func(ctx context.Context, e *common.TopicEvent) (retry bool, err error) {
+		topicEvent = e
+		recv <- struct{}{}
+
+		return false, nil
+	}
+	err := s.AddTopicEventHandler(sub, handler)
+	require.NoErrorf(t, err, "error adding event handler")
+
+	s.registerBaseHandler()
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			makeEventRequestWithMetadata(t, s, "/test", `{
+				"specversion" : "1.0",
+				"type" : "com.github.pull.create",
+				"source" : "https://github.com/cloudevents/spec/pull",
+				"subject" : "123",
+				"id" : "A234-1234-1234",
+				"time" : "2018-04-05T17:31:00Z",
+				"comexampleextension1" : "value",
+				"comexampleothervalue" : 5,
+				"datacontenttype" : "application/json",
+				"data" : {
+					"message":"hello"
+				}
+			}`, http.StatusOK, tt.metadata)
+			<-recv
+			assert.Equal(t, tt.expectedMetadata, topicEvent.Metadata)
 		})
 	}
 }
@@ -272,6 +352,48 @@ func TestEventDataHandling(t *testing.T) {
 func TestHealthCheck(t *testing.T) {
 	s := newServer("", nil)
 	s.registerBaseHandler()
+	makeRequest(t, s, "/healthz", "", http.MethodGet, http.StatusOK)
+}
+
+func TestCustomHealthCheck(t *testing.T) {
+	s := newServer("", nil)
+	err := s.AddHealthCheckHandler("/healthz", func(ctx context.Context) error {
+		return nil
+	})
+	require.NoErrorf(t, err, "error adding custom health check handler")
+	s.registerBaseHandler()
+	makeRequest(t, s, "/healthz", "", http.MethodGet, http.StatusNoContent)
+}
+
+func TestCustomHealthCheckWithoutLeadingSlash(t *testing.T) {
+	s := newServer("", nil)
+	err := s.AddHealthCheckHandler("healthz", func(ctx context.Context) error {
+		return nil
+	})
+	require.NoErrorf(t, err, "error adding custom health check handler")
+	s.registerBaseHandler()
+	makeRequest(t, s, "/healthz", "", http.MethodGet, http.StatusNoContent)
+}
+
+func TestCustomRouteHealthCheck(t *testing.T) {
+	s := newServer("", nil)
+	err := s.AddHealthCheckHandler("custom-health-check", func(ctx context.Context) error {
+		return nil
+	})
+	require.NoErrorf(t, err, "error adding custom health check handler")
+	s.registerBaseHandler()
+	makeRequest(t, s, "/custom-health-check", "", http.MethodGet, http.StatusNoContent)
+	makeRequest(t, s, "/healthz", "", http.MethodGet, http.StatusOK)
+}
+
+func TestCustomHealthCheckError(t *testing.T) {
+	s := newServer("", nil)
+	err := s.AddHealthCheckHandler("custom-health-check", func(ctx context.Context) error {
+		return errors.New("not feeling well, will take day off")
+	})
+	require.NoErrorf(t, err, "error adding custom health check handler")
+	s.registerBaseHandler()
+	makeRequest(t, s, "/custom-health-check", "", http.MethodGet, http.StatusInternalServerError)
 	makeRequest(t, s, "/healthz", "", http.MethodGet, http.StatusOK)
 }
 
@@ -336,7 +458,7 @@ func makeRequest(t *testing.T, s *Server, route, data, method string, expectedSt
 	t.Helper()
 
 	req, err := http.NewRequest(method, route, strings.NewReader(data))
-	assert.NoErrorf(t, err, "error creating request: %s", data)
+	require.NoErrorf(t, err, "error creating request: %s", data)
 	testRequest(t, s, req, expectedStatusCode)
 }
 
@@ -344,7 +466,7 @@ func makeRequestWithExpectedBody(t *testing.T, s *Server, route, data, method st
 	t.Helper()
 
 	req, err := http.NewRequest(method, route, strings.NewReader(data))
-	assert.NoErrorf(t, err, "error creating request: %s", data)
+	require.NoErrorf(t, err, "error creating request: %s", data)
 	testRequestWithResponseBody(t, s, req, expectedStatusCode, expectedBody)
 }
 
@@ -352,27 +474,39 @@ func makeEventRequest(t *testing.T, s *Server, route, data string, expectedStatu
 	t.Helper()
 
 	req, err := http.NewRequest(http.MethodPost, route, strings.NewReader(data))
-	assert.NoErrorf(t, err, "error creating request: %s", data)
+	require.NoErrorf(t, err, "error creating request: %s", data)
 	req.Header.Set("Content-Type", "application/json")
+	testRequest(t, s, req, expectedStatusCode)
+}
+
+func makeEventRequestWithMetadata(t *testing.T, s *Server, route, data string, expectedStatusCode int, metadata map[string]string) {
+	t.Helper()
+
+	req, err := http.NewRequest(http.MethodPost, route, strings.NewReader(data))
+	require.NoErrorf(t, err, "error creating request: %s", data)
+	req.Header.Set("Content-Type", "application/json")
+	for k, v := range metadata {
+		req.Header.Set(k, v)
+	}
 	testRequest(t, s, req, expectedStatusCode)
 }
 
 func TestAddingInvalidEventHandlers(t *testing.T) {
 	s := newServer("", nil)
 	err := s.AddTopicEventHandler(nil, testTopicFunc)
-	assert.Errorf(t, err, "expected error adding no sub event handler")
+	require.Errorf(t, err, "expected error adding no sub event handler")
 
 	sub := &common.Subscription{Metadata: map[string]string{}}
 	err = s.AddTopicEventHandler(sub, testTopicFunc)
-	assert.Errorf(t, err, "expected error adding empty sub event handler")
+	require.Errorf(t, err, "expected error adding empty sub event handler")
 
 	sub.Topic = "test"
 	err = s.AddTopicEventHandler(sub, testTopicFunc)
-	assert.Errorf(t, err, "expected error adding sub without component event handler")
+	require.Errorf(t, err, "expected error adding sub without component event handler")
 
 	sub.PubsubName = "messages"
 	err = s.AddTopicEventHandler(sub, testTopicFunc)
-	assert.Errorf(t, err, "expected error adding sub without route event handler")
+	require.Errorf(t, err, "expected error adding sub without route event handler")
 }
 
 func TestRawPayloadDecode(t *testing.T) {
@@ -384,7 +518,7 @@ func TestRawPayloadDecode(t *testing.T) {
 			err = errors.New("error decode data_base64")
 		}
 		if err != nil {
-			assert.NoErrorf(t, err, "error rawPayload decode")
+			require.NoErrorf(t, err, "error rawPayload decode")
 		}
 		return
 	}
@@ -405,7 +539,7 @@ func TestRawPayloadDecode(t *testing.T) {
 		},
 	}
 	err := s.AddTopicEventHandler(sub3, testRawTopicFunc)
-	assert.NoErrorf(t, err, "error adding raw event handler")
+	require.NoErrorf(t, err, "error adding raw event handler")
 
 	s.registerBaseHandler()
 	makeEventRequest(t, s, "/raw", rawData, http.StatusOK)

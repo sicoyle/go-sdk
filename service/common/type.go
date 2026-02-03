@@ -45,6 +45,12 @@ type TopicEvent struct {
 	Topic string `json:"topic"`
 	// PubsubName is name of the pub/sub this message came from
 	PubsubName string `json:"pubsubname"`
+	// Metadata is the custom metadata attached to the event.
+	Metadata map[string]string `json:"metadata,omitempty"`
+	// TraceID is the tracing header identifier for the incoming event
+	TraceID string `json:"traceid"`
+	// TraceParent is name of the parent trace identifier for the incoming event
+	TraceParent string `json:"traceparent"`
 }
 
 func (e *TopicEvent) Struct(target interface{}) error {
@@ -101,18 +107,32 @@ type Subscription struct {
 	Priority int `json:"priority"`
 	// DisableTopicValidation allows to receive events from publisher topics that differ from the subscribed topic.
 	DisableTopicValidation bool `json:"disableTopicValidation"`
+	// DeadLetterTopic is the name of the deadletter topic.
+	DeadLetterTopic string `json:"deadLetterTopic"`
 }
+
+type SubscriptionResponseStatus string
 
 const (
 	// SubscriptionResponseStatusSuccess means message is processed successfully.
-	SubscriptionResponseStatusSuccess = "SUCCESS"
+	SubscriptionResponseStatusSuccess SubscriptionResponseStatus = "SUCCESS"
 	// SubscriptionResponseStatusRetry means message to be retried by Dapr.
-	SubscriptionResponseStatusRetry = "RETRY"
+	SubscriptionResponseStatusRetry SubscriptionResponseStatus = "RETRY"
 	// SubscriptionResponseStatusDrop means warning is logged and message is dropped.
-	SubscriptionResponseStatusDrop = "DROP"
+	SubscriptionResponseStatusDrop SubscriptionResponseStatus = "DROP"
 )
 
 // SubscriptionResponse represents the response handling hint from subscriber to Dapr.
 type SubscriptionResponse struct {
-	Status string `json:"status"`
+	Status SubscriptionResponseStatus `json:"status"`
+}
+
+type JobEvent struct {
+	JobType string `json:"job_type"`
+	Data    []byte `json:"data"`
+}
+
+type Job struct {
+	TypeURL string `json:"type_url"`
+	Value   string `json:"value"`
 }

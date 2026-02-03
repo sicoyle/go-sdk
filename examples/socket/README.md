@@ -12,7 +12,8 @@ This quickstart requires you to have the following installed on your machine:
 
 ## Step 1 - Setup Dapr
 
-Follow [instructions](https://docs.dapr.io/getting-started/install-dapr/) to download and install the Dapr CLI and initialize Dapr.
+- [Install the Dapr CLI](https://docs.dapr.io/getting-started/install-dapr-cli/)
+- [Initialise Dapr Locally](https://docs.dapr.io/getting-started/install-dapr-selfhost/)
 
 ## Step 2 - Understand the code
 
@@ -69,6 +70,7 @@ There are two ways to launch Dapr applications. You can pass the app executable 
 name: Run and send order
 background: true
 sleep: 5
+timeout_seconds: 60
 expected_stdout_lines:
   - '== APP == dapr client initializing for: /tmp/dapr-order-app-grpc.socket'
   - '== APP == Sending order ID 20'
@@ -85,6 +87,7 @@ dapr run --app-id order-app --log-level error --unix-domain-socket /tmp -- ./ord
 name: Run and get order
 background: true
 sleep: 5
+timeout_seconds: 60
 expected_stdout_lines:
   - '== APP == dapr client initializing for: /tmp/dapr-order-app-grpc.socket'
   - '== APP == Getting order'

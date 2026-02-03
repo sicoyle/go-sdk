@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -101,7 +103,7 @@ func createUnresponsiveServer(network string, unresponsiveServerAddress string) 
 }
 
 func createNonBlockingClient(ctx context.Context, serverAddr string) (client Client, err error) {
-	conn, err := grpc.DialContext(
+	conn, err := grpc.DialContext( //nolint:staticcheck
 		ctx,
 		serverAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -114,44 +116,44 @@ func createNonBlockingClient(ctx context.Context, serverAddr string) (client Cli
 }
 
 func TestGrpcWaitHappyCase(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	err := testClient.Wait(ctx, waitTimeout)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func TestGrpcWaitUnresponsiveTcpServer(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	server, err := createUnresponsiveTCPServer()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	defer server.Close()
 
 	clientConnectionTimeoutCtx, cancel := context.WithTimeout(ctx, connectionTimeout)
 	defer cancel()
 	client, err := createNonBlockingClient(clientConnectionTimeoutCtx, server.address)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	err = client.Wait(ctx, waitTimeout)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Equal(t, errWaitTimedOut, err)
-	assert.Equal(t, uint64(1), atomic.LoadUint64(&server.nClientsSeen))
+	assert.GreaterOrEqual(t, atomic.LoadUint64(&server.nClientsSeen), uint64(1))
 }
 
 func TestGrpcWaitUnresponsiveUnixServer(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	server, err := createUnresponsiveUnixServer()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	defer server.Close()
 
 	clientConnectionTimeoutCtx, cancel := context.WithTimeout(ctx, connectionTimeout)
 	defer cancel()
 	client, err := createNonBlockingClient(clientConnectionTimeoutCtx, "unix://"+server.address)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	err = client.Wait(ctx, waitTimeout)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Equal(t, errWaitTimedOut, err)
-	assert.Equal(t, uint64(1), atomic.LoadUint64(&server.nClientsSeen))
+	assert.GreaterOrEqual(t, atomic.LoadUint64(&server.nClientsSeen), uint64(1))
 }

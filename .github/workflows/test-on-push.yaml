@@ -7,50 +7,40 @@ on:
       - main
 
 jobs:
-
   build:
-    name: Test on ${{ matrix.gover }}
+    name: Test
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        gover:
-          - "1.19"
-          - "1.20"
     env:
-      GOVER: ${{ matrix.gover }}
-      GOLANGCILINT_VER: v1.52.2
+      GOLANGCILINT_VER: v1.64.6
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-    - name: Setup
-      uses: actions/setup-go@v3
-      with:
-        go-version: ${{ env.GOVER }}
+      - name: Setup
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
 
-    - name: Checkout
-      uses: actions/checkout@v3
+      - name: Tidy
+        run: make tidy
 
-    - name: Cache
-      uses: actions/cache@v3
-      with:
-        path: ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
+      - name: Test
+        run: make test
 
-    - name: Tidy
-      run: make tidy
+      - name: Cover
+        uses: codecov/codecov-action@v5
 
-    - name: Test
-      run: make test
+      - name: Lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: ${{ env.GOLANGCILINT_VER }}
+          skip-cache: true
+          args: --timeout=10m0s
 
-    - name: Cover
-      uses: codecov/codecov-action@v3
-
-    - name: Lint
-      uses: golangci/golangci-lint-action@v3.3.1
-      with:
-        version: ${{ env.GOLANGCILINT_VER }}
-        skip-cache: true
-        args: --timeout=10m0s
+      - name: Run go mod tidy check diff
+        run: make modtidy check-diff
+      - name: Run go mod tidy
+        run: make modtidy

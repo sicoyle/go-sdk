@@ -25,12 +25,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
-	commonv1 "github.com/dapr/go-sdk/dapr/proto/common/v1"
-	runtimev1pb "github.com/dapr/go-sdk/dapr/proto/runtime/v1"
+	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
 func TestEncrypt(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("missing ComponentName", func(t *testing.T) {
 		out, err := testClient.Encrypt(ctx,
@@ -138,7 +138,7 @@ func TestEncrypt(t *testing.T) {
 }
 
 func TestDecrypt(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("missing ComponentName", func(t *testing.T) {
 		out, err := testClient.Decrypt(ctx,
@@ -236,13 +236,13 @@ func (s *testDaprServer) performCryptoOperation(stream grpc.ServerStream, reqPro
 
 			payload := reqProto.GetPayload()
 			if payload != nil {
-				if payload.Seq != expectSeq {
-					pw.CloseWithError(fmt.Errorf("invalid sequence number: %d (expected: %d)", payload.Seq, expectSeq))
+				if payload.GetSeq() != expectSeq {
+					pw.CloseWithError(fmt.Errorf("invalid sequence number: %d (expected: %d)", payload.GetSeq(), expectSeq))
 					return
 				}
 				expectSeq++
 
-				_, err = pw.Write(payload.Data)
+				_, err = pw.Write(payload.GetData())
 				if err != nil {
 					pw.CloseWithError(err)
 					return
