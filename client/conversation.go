@@ -462,9 +462,23 @@ type ConversationResultAlpha2 struct {
 }
 
 type ConversationResultAlpha2CompletionUsage struct {
-	CompletionTokens uint64
-	PromptTokens     uint64
-	TotalTokens      uint64
+	CompletionTokens        uint64
+	PromptTokens            uint64
+	TotalTokens             uint64
+	CompletionTokensDetails *ConversationResultAlpha2CompletionUsageCompletionTokensDetails
+	PromptTokensDetails     *ConversationResultAlpha2CompletionUsagePromptTokensDetails
+}
+
+type ConversationResultAlpha2CompletionUsageCompletionTokensDetails struct {
+	AcceptedPredictionTokens uint64
+	AudioTokens              uint64
+	ReasoningTokens          uint64
+	RejectedPredictionTokens uint64
+}
+
+type ConversationResultAlpha2CompletionUsagePromptTokensDetails struct {
+	AudioTokens  uint64
+	CachedTokens uint64
 }
 
 type ConversationResultChoicesAlpha2 struct {
@@ -586,10 +600,28 @@ func (c *GRPCClient) ConverseAlpha2(ctx context.Context, request ConversationReq
 		}
 		var usage *ConversationResultAlpha2CompletionUsage
 		if u := o.GetUsage(); u != nil {
+			var completionTokensDetails *ConversationResultAlpha2CompletionUsageCompletionTokensDetails
+			if ctd := u.GetCompletionTokensDetails(); ctd != nil {
+				completionTokensDetails = &ConversationResultAlpha2CompletionUsageCompletionTokensDetails{
+					AcceptedPredictionTokens: ctd.GetAcceptedPredictionTokens(),
+					AudioTokens:              ctd.GetAudioTokens(),
+					ReasoningTokens:          ctd.GetReasoningTokens(),
+					RejectedPredictionTokens: ctd.GetRejectedPredictionTokens(),
+				}
+			}
+			var promptTokensDetails *ConversationResultAlpha2CompletionUsagePromptTokensDetails
+			if ptd := u.GetPromptTokensDetails(); ptd != nil {
+				promptTokensDetails = &ConversationResultAlpha2CompletionUsagePromptTokensDetails{
+					AudioTokens:  ptd.GetAudioTokens(),
+					CachedTokens: ptd.GetCachedTokens(),
+				}
+			}
 			usage = &ConversationResultAlpha2CompletionUsage{
-				CompletionTokens: u.GetCompletionTokens(),
-				PromptTokens:     u.GetPromptTokens(),
-				TotalTokens:      u.GetTotalTokens(),
+				CompletionTokens:        u.GetCompletionTokens(),
+				PromptTokens:            u.GetPromptTokens(),
+				TotalTokens:             u.GetTotalTokens(),
+				CompletionTokensDetails: completionTokensDetails,
+				PromptTokensDetails:     promptTokensDetails,
 			}
 		}
 		var model *string
