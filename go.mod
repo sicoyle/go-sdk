@@ -3,9 +3,9 @@ module github.com/dapr/go-sdk
 go 1.24.13
 
 require (
-	github.com/dapr/dapr v1.17.0-rc.1.0.20260223152404-af1d144142f5
+	github.com/dapr/dapr v1.17.0
 	github.com/dapr/durabletask-go v0.11.0
-	github.com/dapr/kit v0.16.2-0.20251124175541-3ac186dff64d
+	github.com/dapr/kit v0.17.0
 	github.com/go-chi/chi/v5 v5.2.2
 	github.com/golang/mock v1.6.0
 	github.com/google/uuid v1.6.0
